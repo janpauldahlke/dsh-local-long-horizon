@@ -1,15 +1,11 @@
 /**
- * Browser half of dsh-local-long-horizon: stub rightbar tab (M1).
- *
- * Two-stage registration per ui-sidebar-right (same as gpu-monitor / slot-health):
- *   1. tab type into ctx.sidebarRightTabs
- *   2. body + title into keyed sidebar.right.pane.tab seats
+ * Browser half: Long horizon rightbar tab (PLAN §8.2).
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { SidebarRightTabDefinition } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
-import { StubBody } from './StubBody.tsx'
-import { StubTitle } from './StubTitle.tsx'
+import { LongHorizonBody } from './LongHorizonBody.tsx'
+import { LongHorizonTitle } from './LongHorizonTitle.tsx'
 
 const TAB_ID = 'dsh-local-long-horizon'
 
@@ -27,15 +23,14 @@ export function apply(ctx: Context): void {
       description: () => 'Task status for long-running local agent work (Next 3, inflight, blocked)',
     }],
   }
-  // Register at apply top level — effect-scoped registry stalls browser boot.
   const disposeType = ctx.sidebarRightTabs.register(definition)
   const disposeBody = ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register(
     { name: 'sidebar.right.pane.tab', key: TAB_ID },
-    StubBody,
+    LongHorizonBody,
   ))
   const disposeTitle = ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register(
     { name: 'sidebar.right.pane.tab.title', key: TAB_ID },
-    StubTitle,
+    LongHorizonTitle,
   ))
   ctx.effect(() => () => {
     disposeTitle()

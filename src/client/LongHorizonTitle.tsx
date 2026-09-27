@@ -1,5 +1,12 @@
-/** Live tab title chip (static for M1). */
-export function StubTitle() {
+import { useLongHorizon } from './useLongHorizon.ts'
+
+export function LongHorizonTitle() {
+  const { snapshot, error } = useLongHorizon()
+  let color = '#8b93a7'
+  if (error || (snapshot && !snapshot.ok)) color = '#ef4444'
+  else if (snapshot?.ok && snapshot.initialized && snapshot.enabled) color = '#22c55e'
+  else if (snapshot?.ok && snapshot.initialized) color = '#fbbf24'
+
   return (
     <span
       style={{
@@ -17,7 +24,7 @@ export function StubTitle() {
           width: 8,
           height: 8,
           borderRadius: '50%',
-          background: '#8b93a7',
+          background: color,
           display: 'inline-block',
         }}
       />

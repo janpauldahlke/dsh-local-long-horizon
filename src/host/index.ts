@@ -1,71 +1,110 @@
 /**
- * Host half of dsh-local-long-horizon (M1 skeleton).
+ * Host half of dsh-local-long-horizon.
  *
- * Boot-safe: route serves a stub JSON payload; optional status_ping probes
- * whether an out-of-tree plugin can register agent tools (NOTES S1).
+ * Owns the vault service, agent tools, and GET/POST /api/dsh-local-long-horizon.
+ * Boot-safe: corrupt vault → route/tool error, never a throw that kills the harness.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { URL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import { defineTool } from '@deepseek-ai/dsh-tools'
 import { ROUTE } from './route.ts'
+import { TaskStatusService } from './service.ts'
+import { registerTools } from './tools.ts'
 
 export const name = 'dsh-local-long-horizon'
-/** webServer for the stub route; tools for S1 status_ping probe. */
 export const inject = ['webServer', 'tools']
 
 export { ROUTE } from './route.ts'
 
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    req.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+    req.on('error', reject)
+  })
+}
+
 export function apply(ctx: Context): void {
+  const service = new TaskStatusService()
+
   const unregister = ctx.webServer.register({
     kind: 'exact',
     path: ROUTE,
     handler: (req: IncomingMessage, res: ServerResponse) => {
-      if (req.method !== 'GET') {
-        res.writeHead(405, { 'content-type': 'application/json', allow: 'GET' })
-        res.end(JSON.stringify({ error: 'method not allowed; use GET' }))
-        return
-      }
-      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
-      res.end(JSON.stringify({
-        ok: true,
-        package: 'dsh-local-long-horizon',
-        milestone: 'M1',
-        enabled: false,
-        message: 'stub — vault lands in M2',
-        sampledAt: Date.now(),
-      }))
+      void (async () => {
+        try {
+          const host = req.headers.host ?? '127.0.0.1'
+          const url = new URL(req.url ?? ROUTE, `http://${host}`)
+
+          if (req.method === 'GET') {
+            const cwd = url.searchParams.get('cwd')
+            const snap = await service.snapshot(cwd)
+            res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+            res.end(JSON.stringify(snap))
+            return
+          }
+
+          if (req.method === 'POST') {
+            const raw = await readBody(req)
+            let body: { cwd?: string; enabled?: boolean; action?: string }
+            try {
+              body = JSON.parse(raw || '{}') as typeof body
+            } catch {
+              res.writeHead(400, { 'content-type': 'application/json' })
+              res.end(JSON.stringify({ ok: false, error: 'invalid JSON body' }))
+              return
+            }
+            const cwd = body.cwd?.trim()
+            if (!cwd) {
+              res.writeHead(400, { 'content-type': 'application/json' })
+              res.end(JSON.stringify({ ok: false, error: 'cwd required' }))
+              return
+            }
+            if (body.action === 'init') {
+              const record = await service.init({ cwd })
+              res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+              res.end(JSON.stringify({ ok: true, record }))
+              return
+            }
+            if (typeof body.enabled === 'boolean') {
+              // setEnabled requires existing vault; init-if-missing when enabling
+              const snap = await service.snapshot(cwd)
+              if (!snap.ok) {
+                res.writeHead(500, { 'content-type': 'application/json' })
+                res.end(JSON.stringify(snap))
+                return
+              }
+              if (!snap.initialized) {
+                if (!body.enabled) {
+                  res.writeHead(400, { 'content-type': 'application/json' })
+                  res.end(JSON.stringify({ ok: false, error: 'not initialized' }))
+                  return
+                }
+                await service.init({ cwd })
+              }
+              const record = await service.setEnabled(cwd, body.enabled)
+              res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+              res.end(JSON.stringify({ ok: true, record }))
+              return
+            }
+            res.writeHead(400, { 'content-type': 'application/json' })
+            res.end(JSON.stringify({ ok: false, error: 'expected { cwd, enabled } or { cwd, action: "init" }' }))
+            return
+          }
+
+          res.writeHead(405, { 'content-type': 'application/json', allow: 'GET, POST' })
+          res.end(JSON.stringify({ error: 'method not allowed; use GET or POST' }))
+        } catch (err) {
+          res.writeHead(500, { 'content-type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: String(err) }))
+        }
+      })()
     },
   })
-  ctx.effect(() => unregister, 'long-horizon: /api/dsh-local-long-horizon route')
+  ctx.effect(() => unregister, 'long-horizon: route')
 
-  // S1 probe: same defineTool + ctx.tools.register path as in-tree tool packages.
-  const disposePing = ctx.tools.register(defineTool({
-    name: 'status_ping',
-    description: 'M1 probe: returns ok from dsh-local-long-horizon host module.',
-    parameters: {},
-    output: {
-      schema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          ok: { type: 'boolean', required: true },
-          package: { type: 'string', required: true },
-          at: { type: 'integer', required: true },
-        },
-      },
-      render: (_args, value) => [{
-        type: 'text',
-        text: JSON.stringify(value),
-      }],
-    },
-    async execute() {
-      return {
-        ok: true as const,
-        package: 'dsh-local-long-horizon' as const,
-        at: Date.now(),
-      }
-    },
-  }))
-  ctx.effect(() => disposePing, 'long-horizon: status_ping tool')
+  const disposeTools = registerTools(ctx, service)
+  ctx.effect(() => disposeTools, 'long-horizon: tools')
 }
