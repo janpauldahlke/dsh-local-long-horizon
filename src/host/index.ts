@@ -3,6 +3,9 @@
  *
  * Owns the vault service, agent tools, and GET/POST /api/dsh-local-long-horizon.
  * Boot-safe: corrupt vault → route/tool error, never a throw that kills the harness.
+ *
+ * Tools require only `tools`. The HTTP route is nested under `ctx.inject(['webServer'])`
+ * so headless activates status_* without waiting forever on webServer.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { URL } from 'node:url'
@@ -13,7 +16,7 @@ import { TaskStatusService } from './service.ts'
 import { registerTools } from './tools.ts'
 
 export const name = 'dsh-local-long-horizon'
-export const inject = ['webServer', 'tools']
+export const inject = ['tools']
 
 export { ROUTE } from './route.ts'
 
@@ -26,9 +29,7 @@ function readBody(req: IncomingMessage): Promise<string> {
   })
 }
 
-export function apply(ctx: Context): void {
-  const service = new TaskStatusService()
-
+function registerRoute(ctx: Context, service: TaskStatusService): void {
   const unregister = ctx.webServer.register({
     kind: 'exact',
     path: ROUTE,
@@ -69,7 +70,6 @@ export function apply(ctx: Context): void {
               return
             }
             if (typeof body.enabled === 'boolean') {
-              // setEnabled requires existing vault; init-if-missing when enabling
               const snap = await service.snapshot(cwd)
               if (!snap.ok) {
                 res.writeHead(500, { 'content-type': 'application/json' })
@@ -104,7 +104,16 @@ export function apply(ctx: Context): void {
     },
   })
   ctx.effect(() => unregister, 'long-horizon: route')
+}
+
+export function apply(ctx: Context): void {
+  const service = new TaskStatusService()
 
   const disposeTools = registerTools(ctx, service)
   ctx.effect(() => disposeTools, 'long-horizon: tools')
+
+  // Nested inject: activates when webServer exists (dsh web); no-op on headless.
+  ctx.inject(['webServer'], (webCtx) => {
+    registerRoute(webCtx, service)
+  })
 }

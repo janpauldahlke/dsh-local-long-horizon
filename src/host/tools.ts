@@ -197,18 +197,15 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
       rotateNext: { type: 'boolean', description: 'If true and next[0] matches summary, drop it.' },
     },
     output: {
-      schema: {
-        type: 'object',
-        additionalProperties: true,
-        properties: {
-          warn: { type: 'string' },
-          record: recordSchema,
-        },
+      // Return the record itself (lossless JSON). Warn is render-only.
+      schema: recordSchema,
+      render: (_a, v) => {
+        const warn = (v as { _warn?: string })._warn
+        const text = warn
+          ? `WARN: ${warn}\n${JSON.stringify(v, null, 2)}`
+          : JSON.stringify(v, null, 2)
+        return [{ type: 'text', text }]
       },
-      render: (_a, v) => [{
-        type: 'text',
-        text: v.warn ? `WARN: ${v.warn}\n${JSON.stringify(v.record, null, 2)}` : JSON.stringify(v.record, null, 2),
-      }],
     },
     async execute(args, exec) {
       try {
@@ -218,7 +215,8 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
           args.verify,
           Boolean(args.rotateNext),
         )
-        return { record, warn }
+        if (warn) (record as { _warn?: string })._warn = warn
+        return record
       } catch (err) {
         toolError(err)
       }
