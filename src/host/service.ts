@@ -1,8 +1,9 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { randomBytes } from 'node:crypto'
-import type { DoneItem, LongHorizonSnapshot, TaskStatus } from '../shared/types.ts'
+import type { DoneItem, LongHorizonSnapshot, SyncHints, TaskStatus } from '../shared/types.ts'
 import { INJECT_PATH_REL, MAX_DONE_RECENT, PACKAGE_NAME, STATUS_MD_REL } from '../shared/types.ts'
+import { resolveGitBranch } from './git.ts'
 import { renderInject, renderDisabledInject } from './injector.ts'
 import { renderStatusMd } from './projectMd.ts'
 import { assertNext, capNotes, emptyRecord, ValidationError } from './schema.ts'
@@ -19,6 +20,11 @@ export type ServiceOptions = {
   storageRoot?: string
 }
 
+/** Who/where is writing — stamped onto the vault for pane sync warnings. */
+export type WriterContext = {
+  sessionId?: string | null
+}
+
 export class DisabledError extends Error {
   constructor() {
     super('Long horizon is OFF for this project — flip ON in the pane or call status_set_enabled')
@@ -33,6 +39,16 @@ export class NotInitializedError extends Error {
   }
 }
 
+function ageLabel(at: number): string {
+  const s = Math.max(0, Math.round((Date.now() - at) / 1000))
+  if (s < 60) return `${s}s ago`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 48) return `${h}h ago`
+  return `${Math.floor(h / 24)}d ago`
+}
+
 export class TaskStatusService {
   readonly storageRoot: string
 
@@ -44,7 +60,10 @@ export class TaskStatusService {
     return vaultPath(this.storageRoot, taskIdFromCwd(normalizeCwd(cwd)))
   }
 
-  async snapshot(cwd: string | null | undefined): Promise<LongHorizonSnapshot> {
+  async snapshot(
+    cwd: string | null | undefined,
+    view?: { sessionId?: string | null },
+  ): Promise<LongHorizonSnapshot> {
     const sampledAt = Date.now()
     if (!cwd || cwd.trim() === '') {
       return {
@@ -71,12 +90,14 @@ export class TaskStatusService {
           sampledAt,
         }
       }
+      const sync = await this.buildSyncHints(record, abs, view?.sessionId ?? null)
       return {
         ok: true,
         package: PACKAGE_NAME,
         enabled: record.enabled,
         initialized: true,
         record,
+        sync,
         sampledAt,
       }
     } catch (err) {
@@ -102,18 +123,18 @@ export class TaskStatusService {
     title?: string
     verifyHint?: string
     phase?: string
-  }): Promise<TaskStatus> {
+  }, writer?: WriterContext): Promise<TaskStatus> {
     const abs = normalizeCwd(args.cwd)
     const taskId = taskIdFromCwd(abs)
     const path = vaultPath(this.storageRoot, taskId)
     const existing = await loadVault(path)
     if (existing) {
-      // Re-init refreshes title/hint but keeps history; ensures enabled ON.
       existing.title = args.title?.trim() || existing.title
       if (args.verifyHint !== undefined) existing.verifyHint = args.verifyHint.trim()
       if (args.phase !== undefined) existing.phase = args.phase.trim() || existing.phase
       existing.enabled = true
       existing.updatedAt = Date.now()
+      await this.stampWriter(existing, abs, writer)
       await this.persist(existing, { writeInject: true, writeMd: true })
       return existing
     }
@@ -124,6 +145,7 @@ export class TaskStatusService {
       verifyHint: args.verifyHint,
       phase: args.phase,
     })
+    await this.stampWriter(record, abs, writer)
     await this.persist(record, { writeInject: true, writeMd: true })
     return record
   }
@@ -132,10 +154,11 @@ export class TaskStatusService {
     return this.requireRecord(cwd)
   }
 
-  async setEnabled(cwd: string, enabled: boolean): Promise<TaskStatus> {
+  async setEnabled(cwd: string, enabled: boolean, writer?: WriterContext): Promise<TaskStatus> {
     const record = await this.requireRecord(cwd)
     record.enabled = enabled
     record.updatedAt = Date.now()
+    await this.stampWriter(record, normalizeCwd(cwd), writer)
     if (!enabled) {
       await this.persist(record, { writeInject: 'disabled', writeMd: true })
     } else {
@@ -144,16 +167,17 @@ export class TaskStatusService {
     return record
   }
 
-  async setNext(cwd: string, next: string[]): Promise<TaskStatus> {
+  async setNext(cwd: string, next: string[], writer?: WriterContext): Promise<TaskStatus> {
     assertNext(next)
     const record = await this.requireEnabled(cwd)
     record.next = next.map((s) => s.trim())
     record.updatedAt = Date.now()
+    await this.stampWriter(record, normalizeCwd(cwd), writer)
     await this.persist(record, { writeInject: true, writeMd: true })
     return record
   }
 
-  async setInflight(cwd: string, summary: string | null): Promise<TaskStatus> {
+  async setInflight(cwd: string, summary: string | null, writer?: WriterContext): Promise<TaskStatus> {
     const record = await this.requireEnabled(cwd)
     if (summary === null || summary.trim() === '') {
       record.inFlight = null
@@ -161,22 +185,27 @@ export class TaskStatusService {
       record.inFlight = { summary: summary.trim(), since: Date.now() }
     }
     record.updatedAt = Date.now()
+    await this.stampWriter(record, normalizeCwd(cwd), writer)
     await this.persist(record, { writeInject: true, writeMd: true })
     return record
   }
 
-  async setPhase(cwd: string, phase: string): Promise<TaskStatus> {
+  async setPhase(cwd: string, phase: string, writer?: WriterContext): Promise<TaskStatus> {
     const record = await this.requireEnabled(cwd)
     record.phase = phase.trim() || record.phase
     record.updatedAt = Date.now()
+    await this.stampWriter(record, normalizeCwd(cwd), writer)
     await this.persist(record, { writeInject: true, writeMd: true })
     return record
   }
 
-  async markDone(cwd: string, summary: string, verify?: string, rotateNext = false): Promise<{
-    record: TaskStatus
-    warn?: string
-  }> {
+  async markDone(
+    cwd: string,
+    summary: string,
+    verify?: string,
+    rotateNext = false,
+    writer?: WriterContext,
+  ): Promise<{ record: TaskStatus; warn?: string }> {
     const record = await this.requireEnabled(cwd)
     let warn: string | undefined
     if (!verify || verify.trim() === '') {
@@ -195,36 +224,80 @@ export class TaskStatusService {
       record.next = record.next.slice(1)
     }
     record.updatedAt = Date.now()
+    await this.stampWriter(record, normalizeCwd(cwd), writer)
     await this.persist(record, { writeInject: true, writeMd: true })
     return { record, warn }
   }
 
-  async block(cwd: string, reason: string): Promise<TaskStatus> {
+  async block(cwd: string, reason: string, writer?: WriterContext): Promise<TaskStatus> {
     const record = await this.requireEnabled(cwd)
     record.blocked = { reason: reason.trim(), since: Date.now() }
     record.updatedAt = Date.now()
+    await this.stampWriter(record, normalizeCwd(cwd), writer)
     await this.persist(record, { writeInject: true, writeMd: true })
     return record
   }
 
-  async unblock(cwd: string): Promise<TaskStatus> {
+  async unblock(cwd: string, writer?: WriterContext): Promise<TaskStatus> {
     const record = await this.requireEnabled(cwd)
     record.blocked = null
     record.updatedAt = Date.now()
+    await this.stampWriter(record, normalizeCwd(cwd), writer)
     await this.persist(record, { writeInject: true, writeMd: true })
     return record
   }
 
-  async setNotes(cwd: string, notes: string): Promise<TaskStatus> {
+  async setNotes(cwd: string, notes: string, writer?: WriterContext): Promise<TaskStatus> {
     const record = await this.requireEnabled(cwd)
     record.notes = capNotes(notes)
     record.updatedAt = Date.now()
+    await this.stampWriter(record, normalizeCwd(cwd), writer)
     await this.persist(record, { writeInject: true, writeMd: true })
     return record
   }
 
   recentDone(record: TaskStatus): DoneItem[] {
     return record.done.slice(-MAX_DONE_RECENT).reverse()
+  }
+
+  private async stampWriter(record: TaskStatus, cwd: string, writer?: WriterContext): Promise<void> {
+    const sid = writer?.sessionId?.trim()
+    if (sid) record.lastSessionId = sid
+    const branch = await resolveGitBranch(cwd)
+    if (branch) record.gitBranch = branch
+  }
+
+  private async buildSyncHints(
+    record: TaskStatus,
+    cwd: string,
+    currentSessionId: string | null,
+  ): Promise<SyncHints> {
+    const currentBranch = await resolveGitBranch(cwd)
+    const warnings: string[] = []
+    const ageMs = Date.now() - record.updatedAt
+    if (ageMs >= 6 * 60 * 60 * 1000) {
+      warnings.push(`Last update ${ageLabel(record.updatedAt)} — board may be stale for tonight’s work.`)
+    }
+    if (record.gitBranch && currentBranch && record.gitBranch !== currentBranch) {
+      warnings.push(
+        `Git branch changed: last write on \`${record.gitBranch}\`, now on \`${currentBranch}\`. `
+        + 'Same project board — skim Next/Done before trusting them, or start a fresh track after reset.',
+      )
+    }
+    if (
+      record.lastSessionId
+      && currentSessionId
+      && record.lastSessionId !== currentSessionId
+    ) {
+      warnings.push(
+        'Different chat than the last writer. This board may belong to another session — confirm before continuing.',
+      )
+    }
+    return {
+      currentBranch,
+      currentSessionId,
+      warnings,
+    }
   }
 
   private async requireRecord(cwd: string): Promise<TaskStatus> {

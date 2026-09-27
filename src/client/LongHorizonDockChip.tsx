@@ -28,7 +28,7 @@ export function LongHorizonDockChip(props: {
     const cwd = sessions.byId[sessionId]?.cwd
     return typeof cwd === 'string' && cwd.trim() ? cwd.trim() : null
   })
-  const { snapshot, error } = useLongHorizon(sessionCwd)
+  const { snapshot, error } = useLongHorizon(sessionCwd, sessionId)
   const [paneOpen, setPaneOpenState] = useState(isPaneOpen)
 
   useEffect(() => subscribePaneOpen(() => setPaneOpenState(isPaneOpen())), [])

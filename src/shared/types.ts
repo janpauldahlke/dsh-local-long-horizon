@@ -31,6 +31,18 @@ export type TaskStatus = {
   verifyHint: string
   keyPaths: string[]
   notes: string
+  /** Session that last mutated the vault (dsh chat id), if known. */
+  lastSessionId?: string
+  /** Git branch at last mutation (best-effort). */
+  gitBranch?: string
+}
+
+/** Sync hints for the human pane (not shown on the dock chip). */
+export type SyncHints = {
+  currentBranch: string | null
+  currentSessionId: string | null
+  /** Human-readable mismatch / staleness lines. */
+  warnings: string[]
 }
 
 /** API / pane payload (includes transport ok). */
@@ -41,6 +53,7 @@ export type LongHorizonSnapshot =
       enabled: boolean
       initialized: true
       record: TaskStatus
+      sync: SyncHints
       sampledAt: number
     }
   | {

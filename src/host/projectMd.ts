@@ -37,6 +37,9 @@ export function renderStatusMd(record: TaskStatus): string {
   if (record.verifyHint) {
     lines.push('', `**Verify hint:** ${record.verifyHint}`)
   }
+  if (record.gitBranch) {
+    lines.push('', `*Last write branch:* \`${record.gitBranch}\``)
+  }
   lines.push('')
   return lines.join('\n')
 }

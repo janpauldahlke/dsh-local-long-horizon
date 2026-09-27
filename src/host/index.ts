@@ -41,7 +41,8 @@ function registerRoute(ctx: Context, service: TaskStatusService): void {
 
           if (req.method === 'GET') {
             const cwd = url.searchParams.get('cwd')
-            const snap = await service.snapshot(cwd)
+            const sessionId = url.searchParams.get('sessionId')
+            const snap = await service.snapshot(cwd, { sessionId })
             res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
             res.end(JSON.stringify(snap))
             return
@@ -49,7 +50,7 @@ function registerRoute(ctx: Context, service: TaskStatusService): void {
 
           if (req.method === 'POST') {
             const raw = await readBody(req)
-            let body: { cwd?: string; enabled?: boolean; action?: string }
+            let body: { cwd?: string; enabled?: boolean; action?: string; sessionId?: string }
             try {
               body = JSON.parse(raw || '{}') as typeof body
             } catch {
@@ -58,19 +59,20 @@ function registerRoute(ctx: Context, service: TaskStatusService): void {
               return
             }
             const cwd = body.cwd?.trim()
+            const writer = body.sessionId?.trim() ? { sessionId: body.sessionId.trim() } : undefined
             if (!cwd) {
               res.writeHead(400, { 'content-type': 'application/json' })
               res.end(JSON.stringify({ ok: false, error: 'cwd required' }))
               return
             }
             if (body.action === 'init') {
-              const record = await service.init({ cwd })
+              const record = await service.init({ cwd }, writer)
               res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
               res.end(JSON.stringify({ ok: true, record }))
               return
             }
             if (typeof body.enabled === 'boolean') {
-              const snap = await service.snapshot(cwd)
+              const snap = await service.snapshot(cwd, { sessionId: writer?.sessionId })
               if (!snap.ok) {
                 res.writeHead(500, { 'content-type': 'application/json' })
                 res.end(JSON.stringify(snap))
@@ -82,9 +84,9 @@ function registerRoute(ctx: Context, service: TaskStatusService): void {
                   res.end(JSON.stringify({ ok: false, error: 'not initialized' }))
                   return
                 }
-                await service.init({ cwd })
+                await service.init({ cwd }, writer)
               }
-              const record = await service.setEnabled(cwd, body.enabled)
+              const record = await service.setEnabled(cwd, body.enabled, writer)
               res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
               res.end(JSON.stringify({ ok: true, record }))
               return

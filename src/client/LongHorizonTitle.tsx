@@ -17,7 +17,7 @@ export function LongHorizonTitle(props: {
     const cwd = sessions.byId[sessionId]?.cwd
     return typeof cwd === 'string' && cwd.trim() ? cwd.trim() : null
   })
-  const { snapshot, error } = useLongHorizon(sessionCwd)
+  const { snapshot, error } = useLongHorizon(sessionCwd, sessionId)
 
   let color = '#8b93a7'
   if (error || (snapshot && !snapshot.ok)) color = '#ef4444'

@@ -122,7 +122,7 @@ export function LongHorizonBody(props: {
     return typeof cwd === 'string' && cwd.trim() ? cwd.trim() : null
   })
 
-  const { snapshot, error, cwd } = useLongHorizon(sessionCwd)
+  const { snapshot, error, cwd } = useLongHorizon(sessionCwd, sessionId)
   const [cwdDraft, setCwdDraft] = useState(cwd)
   const [busy, setBusy] = useState(false)
   const [localErr, setLocalErr] = useState<string | null>(null)
@@ -221,7 +221,16 @@ export function LongHorizonBody(props: {
               </button>
             </div>
             <div style={{ ...muted, marginBottom: 2 }}>
-              {record.phase} · {basename(record.cwd)} · {ageLabel(record.updatedAt)}
+              {record.phase}
+              {snapshot?.ok && snapshot.initialized && snapshot.sync.currentBranch
+                ? ` · ${snapshot.sync.currentBranch}`
+                : record.gitBranch
+                  ? ` · ${record.gitBranch}`
+                  : ''}
+              {' · '}
+              {basename(record.cwd)}
+              {' · '}
+              {ageLabel(record.updatedAt)}
             </div>
             <div style={muted} title={record.cwd}>
               <span style={{ fontWeight: 600, fontFamily: 'inherit', color: 'inherit' }}>
@@ -231,6 +240,19 @@ export function LongHorizonBody(props: {
               {record.cwd}
             </div>
           </div>
+          {snapshot?.ok && snapshot.initialized && snapshot.sync.warnings.length > 0 ? (
+            <div style={{
+              ...card,
+              borderColor: 'color-mix(in srgb, #fbbf24 55%, transparent)',
+              background: 'color-mix(in srgb, #fbbf24 10%, transparent)',
+            }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Sync check</div>
+              {snapshot.sync.warnings.map((w) => (
+                <div key={w} style={{ fontSize: 12, marginBottom: 4 }}>{w}</div>
+              ))}
+            </div>
+          ) : null}
           <RecordView record={record} />
         </>
       ) : null}

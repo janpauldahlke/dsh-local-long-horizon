@@ -4,6 +4,7 @@ import {
   getSnapshot,
   getTrackedCwd,
   setTrackedCwd,
+  setTrackedSessionId,
   subscribe,
 } from './store.ts'
 import type { LongHorizonSnapshot } from '../shared/types.ts'
@@ -24,7 +25,7 @@ function detectCwdFallback(): string {
   return getTrackedCwd()
 }
 
-export function useLongHorizon(sessionCwd?: string | null): {
+export function useLongHorizon(sessionCwd?: string | null, sessionId?: string | null): {
   snapshot: LongHorizonSnapshot | null
   error: string | null
   cwd: string
@@ -37,6 +38,12 @@ export function useLongHorizon(sessionCwd?: string | null): {
   useEffect(() => {
     return subscribe(() => bump())
   }, [])
+
+  useEffect(() => {
+    if (typeof sessionId === 'string' && sessionId.trim()) {
+      setTrackedSessionId(sessionId.trim())
+    }
+  }, [sessionId])
 
   // Follow the open workspace folder whenever the session exposes one.
   useEffect(() => {

@@ -8,12 +8,20 @@ let error: string | null = null
 let refs = 0
 let timer: ReturnType<typeof setInterval> | undefined
 let cwd = ''
+let sessionId = ''
 const listeners = new Set<Listener>()
 
 const POLL_MS = 1000
 
 function emit() {
   for (const l of listeners) l()
+}
+
+function queryUrl(): string {
+  const q = new URLSearchParams()
+  q.set('cwd', cwd)
+  if (sessionId) q.set('sessionId', sessionId)
+  return `/api/dsh-local-long-horizon?${q.toString()}`
 }
 
 async function tick() {
@@ -32,9 +40,7 @@ async function tick() {
     return
   }
   try {
-    const res = await fetch(`/api/dsh-local-long-horizon?cwd=${encodeURIComponent(cwd)}`, {
-      cache: 'no-store',
-    })
+    const res = await fetch(queryUrl(), { cache: 'no-store' })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     snapshot = await res.json() as LongHorizonSnapshot
     error = null
@@ -50,8 +56,19 @@ export function setTrackedCwd(next: string) {
   void tick()
 }
 
+export function setTrackedSessionId(next: string) {
+  const n = next.trim()
+  if (n === sessionId) return
+  sessionId = n
+  void tick()
+}
+
 export function getTrackedCwd(): string {
   return cwd
+}
+
+export function getTrackedSessionId(): string {
+  return sessionId
 }
 
 export function subscribe(listener: Listener): () => void {
@@ -84,7 +101,7 @@ export async function postToggle(enabled: boolean): Promise<void> {
   const res = await fetch('/api/dsh-local-long-horizon', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ cwd, enabled }),
+    body: JSON.stringify({ cwd, enabled, sessionId: sessionId || undefined }),
   })
   if (!res.ok) {
     const text = await res.text()
@@ -98,7 +115,7 @@ export async function postInit(): Promise<void> {
   const res = await fetch('/api/dsh-local-long-horizon', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ cwd, action: 'init' }),
+    body: JSON.stringify({ cwd, action: 'init', sessionId: sessionId || undefined }),
   })
   if (!res.ok) {
     const text = await res.text()

@@ -18,7 +18,12 @@ import {
 } from './service.ts'
 
 type ExecLike = {
-  agent?: { session?: { header?: { cwd?: string } } }
+  agent?: {
+    session?: {
+      id?: string
+      header?: { cwd?: string; id?: string }
+    }
+  }
 }
 
 type ToolArgs = Record<string, any>
@@ -33,6 +38,11 @@ function resolveCwd(args: { cwd?: string }, exec: ExecLike): string {
   const fromAgent = exec.agent?.session?.header?.cwd?.trim()
   if (fromAgent) return fromAgent
   throw new Error('cwd required (pass cwd or run from an agent session with a workspace cwd)')
+}
+
+function writerFrom(exec: ExecLike): { sessionId?: string } {
+  const id = exec.agent?.session?.id ?? exec.agent?.session?.header?.id
+  return typeof id === 'string' && id.trim() ? { sessionId: id.trim() } : {}
 }
 
 function toolError(err: unknown): never {
@@ -108,7 +118,7 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
           title: args.title,
           verifyHint: args.verifyHint,
           phase: args.phase,
-        })
+        }, writerFrom(exec))
       } catch (err) {
         toolError(err)
       }
@@ -150,7 +160,7 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
     output: { schema: recordSchema, render: renderJson },
     async execute(args: ToolArgs, exec: ExecLike) {
       try {
-        return await service.setNext(resolveCwd(args, exec), args.next ?? [])
+        return await service.setNext(resolveCwd(args, exec), args.next ?? [], writerFrom(exec))
       } catch (err) {
         toolError(err)
       }
@@ -168,7 +178,7 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
     async execute(args: ToolArgs, exec: ExecLike) {
       try {
         const summary = args.summary?.trim() ? args.summary : null
-        return await service.setInflight(resolveCwd(args, exec), summary)
+        return await service.setInflight(resolveCwd(args, exec), summary, writerFrom(exec))
       } catch (err) {
         toolError(err)
       }
@@ -190,7 +200,7 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
     output: { schema: recordSchema, render: renderJson },
     async execute(args: ToolArgs, exec: ExecLike) {
       try {
-        return await service.setPhase(resolveCwd(args, exec), args.phase)
+        return await service.setPhase(resolveCwd(args, exec), args.phase, writerFrom(exec))
       } catch (err) {
         toolError(err)
       }
@@ -227,6 +237,7 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
           args.summary,
           args.verify,
           Boolean(args.rotateNext),
+          writerFrom(exec),
         )
         if (warn) (record as { _warn?: string })._warn = warn
         return record
@@ -251,7 +262,7 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
     output: { schema: recordSchema, render: renderJson },
     async execute(args: ToolArgs, exec: ExecLike) {
       try {
-        return await service.block(resolveCwd(args, exec), args.reason)
+        return await service.block(resolveCwd(args, exec), args.reason, writerFrom(exec))
       } catch (err) {
         toolError(err)
       }
@@ -267,7 +278,7 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
     output: { schema: recordSchema, render: renderJson },
     async execute(args: ToolArgs, exec: ExecLike) {
       try {
-        return await service.unblock(resolveCwd(args, exec))
+        return await service.unblock(resolveCwd(args, exec), writerFrom(exec))
       } catch (err) {
         toolError(err)
       }
@@ -289,7 +300,7 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
     output: { schema: recordSchema, render: renderJson },
     async execute(args: ToolArgs, exec: ExecLike) {
       try {
-        return await service.setEnabled(resolveCwd(args, exec), Boolean(args.enabled))
+        return await service.setEnabled(resolveCwd(args, exec), Boolean(args.enabled), writerFrom(exec))
       } catch (err) {
         toolError(err)
       }
