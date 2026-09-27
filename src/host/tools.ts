@@ -2,8 +2,11 @@
  * Agent tools for long-horizon task status.
  *
  * Registers plain tool definition objects on the harness `tools` service —
- * no import from `@deepseek-ai/dsh-tools` (that package is already loaded by
- * the host; we only need `ctx.tools.register`).
+ * no import from `@deepseek-ai/dsh-tools`.
+ *
+ * Pin note (dsh ≥ 0.1.7): output/parameter JSON Schema must NOT put
+ * `required: true` on scalar property nodes — use object-level
+ * `required: ['field', …]` arrays (defineTool used to rewrite this).
  */
 import type { Context } from '@deepseek-ai/cordis'
 import {
@@ -74,10 +77,11 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
       schema: {
         type: 'object',
         additionalProperties: false,
+        required: ['ok', 'package', 'at'],
         properties: {
-          ok: { type: 'boolean', required: true },
-          package: { type: 'string', required: true },
-          at: { type: 'integer', required: true },
+          ok: { type: 'boolean' },
+          package: { type: 'string' },
+          at: { type: 'integer' },
         },
       },
       render: (_a: unknown, v: unknown) => [{ type: 'text', text: JSON.stringify(v) }],
@@ -131,12 +135,16 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
     name: 'status_set_next',
     description: 'Replace the Next list (hard cap 3 items). Refused when Long horizon is OFF.',
     parameters: {
-      cwd: { type: 'string' },
-      next: {
-        type: 'array',
-        required: true,
-        description: '0–3 next work items.',
-        items: { type: 'string' },
+      type: 'object',
+      additionalProperties: false,
+      required: ['next'],
+      properties: {
+        cwd: { type: 'string' },
+        next: {
+          type: 'array',
+          description: '0–3 next work items.',
+          items: { type: 'string' },
+        },
       },
     },
     output: { schema: recordSchema, render: renderJson },
@@ -171,8 +179,13 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
     name: 'status_set_phase',
     description: 'Set the short phase label.',
     parameters: {
-      cwd: { type: 'string' },
-      phase: { type: 'string', required: true },
+      type: 'object',
+      additionalProperties: false,
+      required: ['phase'],
+      properties: {
+        cwd: { type: 'string' },
+        phase: { type: 'string' },
+      },
     },
     output: { schema: recordSchema, render: renderJson },
     async execute(args: ToolArgs, exec: ExecLike) {
@@ -188,10 +201,15 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
     name: 'status_mark_done',
     description: 'Append a done item. Prefer including verify evidence (warn-only if missing in v0).',
     parameters: {
-      cwd: { type: 'string' },
-      summary: { type: 'string', required: true },
-      verify: { type: 'string', description: 'How this was verified.' },
-      rotateNext: { type: 'boolean', description: 'If true and next[0] matches summary, drop it.' },
+      type: 'object',
+      additionalProperties: false,
+      required: ['summary'],
+      properties: {
+        cwd: { type: 'string' },
+        summary: { type: 'string' },
+        verify: { type: 'string', description: 'How this was verified.' },
+        rotateNext: { type: 'boolean', description: 'If true and next[0] matches summary, drop it.' },
+      },
     },
     output: {
       schema: recordSchema,
@@ -222,8 +240,13 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
     name: 'status_block',
     description: 'Mark the task blocked with a reason.',
     parameters: {
-      cwd: { type: 'string' },
-      reason: { type: 'string', required: true },
+      type: 'object',
+      additionalProperties: false,
+      required: ['reason'],
+      properties: {
+        cwd: { type: 'string' },
+        reason: { type: 'string' },
+      },
     },
     output: { schema: recordSchema, render: renderJson },
     async execute(args: ToolArgs, exec: ExecLike) {
@@ -255,8 +278,13 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
     name: 'status_set_enabled',
     description: 'Turn Long horizon ON or OFF for this project (OFF refuses mutations and freezes inject).',
     parameters: {
-      cwd: { type: 'string' },
-      enabled: { type: 'boolean', required: true },
+      type: 'object',
+      additionalProperties: false,
+      required: ['enabled'],
+      properties: {
+        cwd: { type: 'string' },
+        enabled: { type: 'boolean' },
+      },
     },
     output: { schema: recordSchema, render: renderJson },
     async execute(args: ToolArgs, exec: ExecLike) {

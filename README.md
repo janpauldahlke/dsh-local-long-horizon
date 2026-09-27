@@ -2,7 +2,7 @@
 
 Installable [DeepSeek Harness](https://github.com/deepseek-ai) (`dsh`) plugin: **Host-owned** long-horizon task status for local coding agents.
 
-**Pin:** `dsh` **0.1.6-alpha.2** · package `dsh-local-long-horizon`
+**Pin:** `dsh` **0.1.7-rc.2** · package `dsh-local-long-horizon`
 
 ## Install
 
@@ -46,10 +46,14 @@ Do not invent a parallel STATUS novel; the vault owns truth and STATUS.md is gen
 
 ## UI
 
-Open the **Long horizon** rightbar tab. Bind an absolute project `cwd`, **Init**, then use **ON/OFF**. CSS chrome matches slot-health / gpu-monitor (inline `currentColor` cards).
+Open the **Long horizon** rightbar tab. It **auto-follows the chat’s workspace folder** (`useSessions` → `session.cwd`). Paste + **Track folder** only to override; **Use chat workspace** resets.
+
+When the rightbar group is closed, a **composer dock chip** (same pill chrome as GPU / Slot Health) shows a short live status (`Horizon · skim README`, `Horizon · blocked`, …) with a brain glyph. Click it to reopen the pane.
+
+Try the fixture: open `/home/hagbard/dev/tst-long-horizon` as the chat workspace, hard-reload the UI — dock chip + pane should agree. Re-seed with `node scripts/seed-tst-long-horizon.mjs`.
 
 ## Limitations
 
 - Last-writer-wins; no distributed lock.
-- Pane cwd bind is manual if the shell does not expose cwd to the client.
+- If a chat has no workspace cwd yet, paste a path or open a folder in the chat.
 - Out of tree only — no harness core patches.

@@ -24,7 +24,7 @@ async function tick() {
       enabled: false,
       initialized: false,
       cwd: null,
-      message: 'Set a project cwd to track (open a workspace session).',
+      message: 'No folder yet — open a workspace in this chat, or paste a path.',
       sampledAt: Date.now(),
     }
     error = null

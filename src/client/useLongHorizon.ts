@@ -1,4 +1,4 @@
-import { useEffect, useReducer } from 'react'
+import { useEffect, useReducer, useRef } from 'react'
 import {
   getError,
   getSnapshot,
@@ -8,8 +8,11 @@ import {
 } from './store.ts'
 import type { LongHorizonSnapshot } from '../shared/types.ts'
 
-/** Best-effort cwd from the browser location / dsh shell globals. */
-function detectCwd(): string {
+/**
+ * Best-effort cwd when the session hook is unavailable (e.g. isolated render).
+ * Prefer `useSessions(…).cwd` from the rightbar props — see LongHorizonBody.
+ */
+function detectCwdFallback(): string {
   try {
     const w = window as unknown as {
       __DSH_CWD__?: string
@@ -18,25 +21,40 @@ function detectCwd(): string {
     if (typeof w.__DSH_CWD__ === 'string' && w.__DSH_CWD__) return w.__DSH_CWD__
     if (typeof w.__dsh?.cwd === 'string' && w.__dsh.cwd) return w.__dsh.cwd
   } catch { /* ignore */ }
-  // Fallback: last tracked, or empty (pane shows init prompt).
   return getTrackedCwd()
 }
 
-export function useLongHorizon(): {
+export function useLongHorizon(sessionCwd?: string | null): {
   snapshot: LongHorizonSnapshot | null
   error: string | null
   cwd: string
+  /** Absolute path from the active chat’s workspace, if any. */
+  sessionCwd: string | null
 } {
   const [, bump] = useReducer((n: number) => n + 1, 0)
+  const lastAuto = useRef<string | null>(null)
+
   useEffect(() => {
-    const detected = detectCwd()
-    if (detected) setTrackedCwd(detected)
     return subscribe(() => bump())
   }, [])
+
+  // Follow the open workspace folder whenever the session exposes one.
+  useEffect(() => {
+    const fromSession = typeof sessionCwd === 'string' && sessionCwd.trim()
+      ? sessionCwd.trim()
+      : null
+    const next = fromSession ?? detectCwdFallback()
+    if (!next) return
+    if (fromSession && fromSession === lastAuto.current && getTrackedCwd() === fromSession) return
+    if (fromSession) lastAuto.current = fromSession
+    setTrackedCwd(next)
+  }, [sessionCwd])
+
   return {
     snapshot: getSnapshot(),
     error: getError(),
     cwd: getTrackedCwd(),
+    sessionCwd: typeof sessionCwd === 'string' && sessionCwd.trim() ? sessionCwd.trim() : null,
   }
 }
 

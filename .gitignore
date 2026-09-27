@@ -12,3 +12,4 @@ dist/
 # Session leftovers
 agent/.dsh-session
 **/.dsh-session
+scripts/**
