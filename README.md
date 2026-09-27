@@ -9,11 +9,11 @@ Installable [DeepSeek Harness](https://github.com/deepseek-ai) (`dsh`) plugin: *
 ```sh
 npm install && npm run build
 dsh plugin --profile web add /abs/path/to/dsh-local-long-horizon
-# restart or boot acceptance:
+# restart or boot:
 env -u DSH_WEB_URL -u DSH_SHELL -u DSH_SESSION_ID dsh web --port 3090 --no-open
 ```
 
-Requires `@deepseek-ai/dsh-tools` to resolve (this repo uses `file:../deepseek-harness/packages/core/tools`).
+No harness `file:` deps — host registers tools on the live `ctx.tools` service (already provided by dsh).
 
 Uninstall: `dsh plugin --profile web remove dsh-local-long-horizon` (or remove from profile bundles) and restart the **acceptance** instance.
 

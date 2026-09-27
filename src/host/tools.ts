@@ -1,9 +1,11 @@
 /**
  * Agent tools for long-horizon task status.
- * cwd: prefer arg; else exec.agent.session.header.cwd.
+ *
+ * Registers plain tool definition objects on the harness `tools` service —
+ * no import from `@deepseek-ai/dsh-tools` (that package is already loaded by
+ * the host; we only need `ctx.tools.register`).
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { defineTool } from '@deepseek-ai/dsh-tools'
 import {
   CorruptVaultError,
   DisabledError,
@@ -14,6 +16,12 @@ import {
 
 type ExecLike = {
   agent?: { session?: { header?: { cwd?: string } } }
+}
+
+type ToolArgs = Record<string, any>
+
+type ToolsFace = {
+  register: (def: Record<string, unknown>) => () => void
 }
 
 function resolveCwd(args: { cwd?: string }, exec: ExecLike): string {
@@ -50,10 +58,15 @@ const recordSchema = {
   },
 }
 
+function renderJson(_args: unknown, value: unknown) {
+  return [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }]
+}
+
 export function registerTools(ctx: Context, service: TaskStatusService): () => void {
+  const tools = (ctx as unknown as { tools: ToolsFace }).tools
   const disposers: Array<() => void> = []
 
-  disposers.push(ctx.tools.register(defineTool({
+  disposers.push(tools.register({
     name: 'status_ping',
     description: 'Health probe for dsh-local-long-horizon host module.',
     parameters: {},
@@ -67,14 +80,14 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
           at: { type: 'integer', required: true },
         },
       },
-      render: (_a, v) => [{ type: 'text', text: JSON.stringify(v) }],
+      render: (_a: unknown, v: unknown) => [{ type: 'text', text: JSON.stringify(v) }],
     },
     async execute() {
       return { ok: true as const, package: 'dsh-local-long-horizon' as const, at: Date.now() }
     },
-  })))
+  }))
 
-  disposers.push(ctx.tools.register(defineTool({
+  disposers.push(tools.register({
     name: 'status_init',
     description: 'Create or refresh the long-horizon vault for a project cwd. Enables Long horizon ON.',
     parameters: {
@@ -83,15 +96,11 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
       verifyHint: { type: 'string', description: 'How to verify done items.' },
       phase: { type: 'string', description: 'Short phase label.' },
     },
-    output: {
-      schema: recordSchema,
-      render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }],
-    },
-    async execute(args, exec) {
+    output: { schema: recordSchema, render: renderJson },
+    async execute(args: ToolArgs, exec: ExecLike) {
       try {
-        const cwd = resolveCwd(args, exec)
         return await service.init({
-          cwd,
+          cwd: resolveCwd(args, exec),
           title: args.title,
           verifyHint: args.verifyHint,
           phase: args.phase,
@@ -100,28 +109,25 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
         toolError(err)
       }
     },
-  })))
+  }))
 
-  disposers.push(ctx.tools.register(defineTool({
+  disposers.push(tools.register({
     name: 'status_get',
     description: 'Return the full structured long-horizon status for the current (or named) cwd.',
     parameters: {
       cwd: { type: 'string', description: 'Absolute project cwd (defaults to session cwd).' },
     },
-    output: {
-      schema: recordSchema,
-      render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }],
-    },
-    async execute(args, exec) {
+    output: { schema: recordSchema, render: renderJson },
+    async execute(args: ToolArgs, exec: ExecLike) {
       try {
         return await service.get(resolveCwd(args, exec))
       } catch (err) {
         toolError(err)
       }
     },
-  })))
+  }))
 
-  disposers.push(ctx.tools.register(defineTool({
+  disposers.push(tools.register({
     name: 'status_set_next',
     description: 'Replace the Next list (hard cap 3 items). Refused when Long horizon is OFF.',
     parameters: {
@@ -133,31 +139,25 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
         items: { type: 'string' },
       },
     },
-    output: {
-      schema: recordSchema,
-      render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }],
-    },
-    async execute(args, exec) {
+    output: { schema: recordSchema, render: renderJson },
+    async execute(args: ToolArgs, exec: ExecLike) {
       try {
         return await service.setNext(resolveCwd(args, exec), args.next ?? [])
       } catch (err) {
         toolError(err)
       }
     },
-  })))
+  }))
 
-  disposers.push(ctx.tools.register(defineTool({
+  disposers.push(tools.register({
     name: 'status_set_inflight',
     description: 'Set or clear the single in-flight slice. Pass empty summary to clear.',
     parameters: {
       cwd: { type: 'string' },
       summary: { type: 'string', description: 'In-flight summary, or empty to clear.' },
     },
-    output: {
-      schema: recordSchema,
-      render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }],
-    },
-    async execute(args, exec) {
+    output: { schema: recordSchema, render: renderJson },
+    async execute(args: ToolArgs, exec: ExecLike) {
       try {
         const summary = args.summary?.trim() ? args.summary : null
         return await service.setInflight(resolveCwd(args, exec), summary)
@@ -165,29 +165,26 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
         toolError(err)
       }
     },
-  })))
+  }))
 
-  disposers.push(ctx.tools.register(defineTool({
+  disposers.push(tools.register({
     name: 'status_set_phase',
     description: 'Set the short phase label.',
     parameters: {
       cwd: { type: 'string' },
       phase: { type: 'string', required: true },
     },
-    output: {
-      schema: recordSchema,
-      render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }],
-    },
-    async execute(args, exec) {
+    output: { schema: recordSchema, render: renderJson },
+    async execute(args: ToolArgs, exec: ExecLike) {
       try {
         return await service.setPhase(resolveCwd(args, exec), args.phase)
       } catch (err) {
         toolError(err)
       }
     },
-  })))
+  }))
 
-  disposers.push(ctx.tools.register(defineTool({
+  disposers.push(tools.register({
     name: 'status_mark_done',
     description: 'Append a done item. Prefer including verify evidence (warn-only if missing in v0).',
     parameters: {
@@ -197,17 +194,15 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
       rotateNext: { type: 'boolean', description: 'If true and next[0] matches summary, drop it.' },
     },
     output: {
-      // Return the record itself (lossless JSON). Warn is render-only.
       schema: recordSchema,
-      render: (_a, v) => {
-        const warn = (v as { _warn?: string })._warn
-        const text = warn
-          ? `WARN: ${warn}\n${JSON.stringify(v, null, 2)}`
+      render: (_a: unknown, v: { _warn?: string }) => {
+        const text = v._warn
+          ? `WARN: ${v._warn}\n${JSON.stringify(v, null, 2)}`
           : JSON.stringify(v, null, 2)
         return [{ type: 'text', text }]
       },
     },
-    async execute(args, exec) {
+    async execute(args: ToolArgs, exec: ExecLike) {
       try {
         const { record, warn } = await service.markDone(
           resolveCwd(args, exec),
@@ -221,66 +216,57 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
         toolError(err)
       }
     },
-  })))
+  }))
 
-  disposers.push(ctx.tools.register(defineTool({
+  disposers.push(tools.register({
     name: 'status_block',
     description: 'Mark the task blocked with a reason.',
     parameters: {
       cwd: { type: 'string' },
       reason: { type: 'string', required: true },
     },
-    output: {
-      schema: recordSchema,
-      render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }],
-    },
-    async execute(args, exec) {
+    output: { schema: recordSchema, render: renderJson },
+    async execute(args: ToolArgs, exec: ExecLike) {
       try {
         return await service.block(resolveCwd(args, exec), args.reason)
       } catch (err) {
         toolError(err)
       }
     },
-  })))
+  }))
 
-  disposers.push(ctx.tools.register(defineTool({
+  disposers.push(tools.register({
     name: 'status_unblock',
     description: 'Clear the blocked state.',
     parameters: {
       cwd: { type: 'string' },
     },
-    output: {
-      schema: recordSchema,
-      render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }],
-    },
-    async execute(args, exec) {
+    output: { schema: recordSchema, render: renderJson },
+    async execute(args: ToolArgs, exec: ExecLike) {
       try {
         return await service.unblock(resolveCwd(args, exec))
       } catch (err) {
         toolError(err)
       }
     },
-  })))
+  }))
 
-  disposers.push(ctx.tools.register(defineTool({
+  disposers.push(tools.register({
     name: 'status_set_enabled',
     description: 'Turn Long horizon ON or OFF for this project (OFF refuses mutations and freezes inject).',
     parameters: {
       cwd: { type: 'string' },
       enabled: { type: 'boolean', required: true },
     },
-    output: {
-      schema: recordSchema,
-      render: (_a, v) => [{ type: 'text', text: JSON.stringify(v, null, 2) }],
-    },
-    async execute(args, exec) {
+    output: { schema: recordSchema, render: renderJson },
+    async execute(args: ToolArgs, exec: ExecLike) {
       try {
         return await service.setEnabled(resolveCwd(args, exec), Boolean(args.enabled))
       } catch (err) {
         toolError(err)
       }
     },
-  })))
+  }))
 
   return () => {
     for (const d of disposers.reverse()) d()

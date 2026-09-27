@@ -37,9 +37,6 @@
       ]
     }
   },
-  "dependencies": {
-    "@deepseek-ai/dsh-tools": "file:../deepseek-harness/packages/core/tools"
-  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
