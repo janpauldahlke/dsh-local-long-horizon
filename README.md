@@ -134,6 +134,21 @@ Do not invent a parallel STATUS novel; the vault owns truth and STATUS.md is gen
 
 ## Install
 
+### From npm (recommended)
+
+```sh
+dsh plugin --profile web add dsh-local-long-horizon
+# restart dsh web (or rely on live patch reload), then hard-refresh the browser
+```
+
+### From GitHub
+
+```sh
+dsh plugin --profile web add github:janpauldahlke/dsh-local-long-horizon
+```
+
+### From a git checkout (developers)
+
 ```sh
 git clone https://github.com/janpauldahlke/dsh-local-long-horizon.git
 cd dsh-local-long-horizon
