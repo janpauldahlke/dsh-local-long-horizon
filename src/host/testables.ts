@@ -12,6 +12,13 @@ export {
 export { assertNext, capNotes, emptyRecord, requireNonEmpty } from './schema.ts'
 export { renderInject, renderDisabledInject } from './injector.ts'
 export { renderStatusMd } from './projectMd.ts'
+export {
+  ensureAgentsMd,
+  hasLongHorizonSection,
+  LONG_HORIZON_HEADING,
+  LONG_HORIZON_SECTION,
+  mergeAgentsMd,
+} from './agentsMd.ts'
 export { normalizeCwd, taskIdFromCwd } from './taskId.ts'
 export { defaultStorageRoot, loadVault, saveVault, vaultPath } from './storage.ts'
 export { registerTools } from './tools.ts'

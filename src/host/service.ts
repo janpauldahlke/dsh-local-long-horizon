@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto'
 import type { DoneItem, LongHorizonSnapshot, SyncHints, TaskStatus } from '../shared/types.ts'
 import { INJECT_PATH_REL, MAX_DONE_RECENT, PACKAGE_NAME, STATUS_MD_REL } from '../shared/types.ts'
 import { resolveGitBranch } from './git.ts'
+import { ensureAgentsMd } from './agentsMd.ts'
 import { renderInject, renderDisabledInject } from './injector.ts'
 import { renderStatusMd } from './projectMd.ts'
 import { assertNext, capNotes, emptyRecord, requireNonEmpty, ValidationError } from './schema.ts'
@@ -136,6 +137,7 @@ export class TaskStatusService {
       existing.updatedAt = Date.now()
       await this.stampWriter(existing, abs, writer)
       await this.persist(existing, { writeInject: true, writeMd: true })
+      await ensureAgentsMd(abs)
       return existing
     }
     const record = emptyRecord({
@@ -147,6 +149,7 @@ export class TaskStatusService {
     })
     await this.stampWriter(record, abs, writer)
     await this.persist(record, { writeInject: true, writeMd: true })
+    await ensureAgentsMd(abs)
     return record
   }
 
@@ -163,6 +166,7 @@ export class TaskStatusService {
       await this.persist(record, { writeInject: 'disabled', writeMd: true })
     } else {
       await this.persist(record, { writeInject: true, writeMd: true })
+      await ensureAgentsMd(normalizeCwd(cwd))
     }
     return record
   }

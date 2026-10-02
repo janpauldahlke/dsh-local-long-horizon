@@ -110,9 +110,14 @@ not replace that seam — it **hooks into it**.
    giant static prompt — while `AGENTS.md` is the stable “glue” DSH already
    knows how to inject.
 
-Without an `AGENTS.md` (or equivalent instruction), the vault and tools still
-work, but a fresh agent is more likely to ignore the inject file and fall back
-to chat memory or read-loops. **Use `AGENTS.md`.**
+When you turn Long horizon **ON** (`status_init`, pane “Start tracking”, or
+re-enable), the Host **auto-ensures** that glue: creates a minimal root
+`AGENTS.md` if missing, or **appends** the `## Long horizon` section if the file
+exists without it. It never overwrites a richer human `AGENTS.md` — hand-tune
+project-specific rules freely; only the missing section is added.
+
+Without that section, the vault and tools still work, but a fresh agent is more
+likely to ignore the inject file and fall back to chat memory or read-loops.
 
 ### Recommended `AGENTS.md` snippet
 
