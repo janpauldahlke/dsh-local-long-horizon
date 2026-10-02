@@ -87,7 +87,7 @@ function RecordView({ record }: { record: TaskStatus }) {
           <div style={muted}>—</div>
         ) : (
           <ol style={{ margin: 0, paddingLeft: 18 }}>
-            {record.next.map((n) => <li key={n}>{n}</li>)}
+            {record.next.map((n, i) => <li key={`${i}:${n}`}>{n}</li>)}
           </ol>
         )}
       </div>
@@ -228,15 +228,14 @@ export function LongHorizonBody(props: {
                   ? ` · ${record.gitBranch}`
                   : ''}
               {' · '}
-              {basename(record.cwd)}
-              {' · '}
               {ageLabel(record.updatedAt)}
             </div>
+            {record.title.trim() && record.title.trim() !== basename(record.cwd) ? (
+              <div style={{ fontWeight: 600, marginBottom: 2, fontSize: 13 }}>
+                {record.title}
+              </div>
+            ) : null}
             <div style={muted} title={record.cwd}>
-              <span style={{ fontWeight: 600, fontFamily: 'inherit', color: 'inherit' }}>
-                {basename(record.cwd)}
-              </span>
-              {' · '}
               {record.cwd}
             </div>
           </div>

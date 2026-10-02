@@ -4,17 +4,25 @@ import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 
-export async function resolveGitBranch(cwd: string): Promise<string | null> {
+async function gitShort(cwd: string, args: string[]): Promise<string | null> {
   try {
-    const { stdout } = await execFileAsync(
-      'git',
-      ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'],
-      { timeout: 2000, maxBuffer: 64 * 1024 },
-    )
+    const { stdout } = await execFileAsync('git', ['-C', cwd, ...args], {
+      timeout: 2000,
+      maxBuffer: 64 * 1024,
+    })
     const branch = stdout.trim()
-    if (!branch || branch === 'HEAD') return null // detached
+    if (!branch || branch === 'HEAD') return null
     return branch
   } catch {
     return null
   }
+}
+
+export async function resolveGitBranch(cwd: string): Promise<string | null> {
+  // symbolic-ref works before the first commit; rev-parse is the fallback.
+  return (
+    await gitShort(cwd, ['symbolic-ref', '--short', 'HEAD'])
+  ) ?? (
+    await gitShort(cwd, ['rev-parse', '--abbrev-ref', 'HEAD'])
+  )
 }

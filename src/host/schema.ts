@@ -25,6 +25,35 @@ export function capNotes(notes: string): string {
   return `${notes.slice(0, MAX_NOTES_CHARS - 1)}…`
 }
 
+/** Require a non-empty trimmed string (tool args / mutators). */
+export function requireNonEmpty(value: unknown, field: string): string {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text) throw new ValidationError(`${field} must be a non-empty string`)
+  return text
+}
+
+/** Reject valid-JSON objects that are not a TaskStatus vault record. */
+export function assertVaultShape(raw: unknown): asserts raw is TaskStatus {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new ValidationError('vault root must be an object')
+  }
+  const o = raw as Record<string, unknown>
+  for (const key of ['taskId', 'title', 'cwd', 'phase'] as const) {
+    if (typeof o[key] !== 'string' || (o[key] as string).trim() === '') {
+      throw new ValidationError(`vault missing string field ${key}`)
+    }
+  }
+  if (typeof o.updatedAt !== 'number' || !Number.isFinite(o.updatedAt)) {
+    throw new ValidationError('vault.updatedAt must be a finite number')
+  }
+  if (typeof o.enabled !== 'boolean') {
+    throw new ValidationError('vault.enabled must be a boolean')
+  }
+  if (!Array.isArray(o.next) || !Array.isArray(o.done) || !Array.isArray(o.keyPaths)) {
+    throw new ValidationError('vault next/done/keyPaths must be arrays')
+  }
+}
+
 export function emptyRecord(partial: {
   taskId: string
   cwd: string

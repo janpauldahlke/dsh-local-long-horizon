@@ -6,7 +6,7 @@ import { INJECT_PATH_REL, MAX_DONE_RECENT, PACKAGE_NAME, STATUS_MD_REL } from '.
 import { resolveGitBranch } from './git.ts'
 import { renderInject, renderDisabledInject } from './injector.ts'
 import { renderStatusMd } from './projectMd.ts'
-import { assertNext, capNotes, emptyRecord, ValidationError } from './schema.ts'
+import { assertNext, capNotes, emptyRecord, requireNonEmpty, ValidationError } from './schema.ts'
 import {
   CorruptVaultError,
   defaultStorageRoot,
@@ -206,21 +206,25 @@ export class TaskStatusService {
     rotateNext = false,
     writer?: WriterContext,
   ): Promise<{ record: TaskStatus; warn?: string }> {
+    const summaryText = requireNonEmpty(summary, 'summary')
     const record = await this.requireEnabled(cwd)
     let warn: string | undefined
     if (!verify || verify.trim() === '') {
       warn = 'mark_done without verify — accepted with warning (v0)'
     }
+    // Omit absent verify — `verify: undefined` is not lossless JSON and breaks
+    // harness tool-result cloning (agent retries → duplicate done rows).
     const item: DoneItem = {
       id: randomBytes(4).toString('hex'),
-      summary: summary.trim(),
-      verify: verify?.trim() || undefined,
+      summary: summaryText,
       at: Date.now(),
     }
+    const verifyText = verify?.trim()
+    if (verifyText) item.verify = verifyText
     record.done.push(item)
     if (record.done.length > 50) record.done = record.done.slice(-50)
-    if (record.inFlight?.summary === summary.trim()) record.inFlight = null
-    if (rotateNext && record.next[0] === summary.trim()) {
+    if (record.inFlight?.summary === summaryText) record.inFlight = null
+    if (rotateNext && record.next[0] === summaryText) {
       record.next = record.next.slice(1)
     }
     record.updatedAt = Date.now()
@@ -230,8 +234,9 @@ export class TaskStatusService {
   }
 
   async block(cwd: string, reason: string, writer?: WriterContext): Promise<TaskStatus> {
+    const reasonText = requireNonEmpty(reason, 'reason')
     const record = await this.requireEnabled(cwd)
-    record.blocked = { reason: reason.trim(), since: Date.now() }
+    record.blocked = { reason: reasonText, since: Date.now() }
     record.updatedAt = Date.now()
     await this.stampWriter(record, normalizeCwd(cwd), writer)
     await this.persist(record, { writeInject: true, writeMd: true })

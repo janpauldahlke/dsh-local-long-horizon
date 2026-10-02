@@ -42,10 +42,22 @@ await build({
   logLevel: 'warning',
 })
 
-// Testable host service (no cordis) for smoke scripts.
+// Testable host service (no cordis) for smoke scripts / fixture seed.
 await build({
   entryPoints: [join(root, 'src/host/service.ts')],
   outfile: join(root, 'lib/service.mjs'),
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  target: 'es2024',
+  sourcemap: true,
+  logLevel: 'warning',
+})
+
+// Full host surface for node tests (service + schema + tools, no cordis boot).
+await build({
+  entryPoints: [join(root, 'src/host/testables.ts')],
+  outfile: join(root, 'lib/testables.mjs'),
   bundle: true,
   format: 'esm',
   platform: 'node',

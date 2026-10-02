@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 import type { TaskStatus } from '../shared/types.ts'
+import { assertVaultShape, ValidationError } from './schema.ts'
 
 export function defaultStorageRoot(): string {
   return join(homedir(), '.dsh', 'storages', 'dsh-local-long-horizon')
@@ -21,7 +22,7 @@ export class CorruptVaultError extends Error {
   }
 }
 
-/** Load vault or null if missing. Throws CorruptVaultError on bad JSON. */
+/** Load vault or null if missing. Throws CorruptVaultError on bad JSON or wrong shape. */
 export async function loadVault(path: string): Promise<TaskStatus | null> {
   let raw: string
   try {
@@ -31,11 +32,18 @@ export async function loadVault(path: string): Promise<TaskStatus | null> {
     if (code === 'ENOENT') return null
     throw err
   }
+  let parsed: unknown
   try {
-    return JSON.parse(raw) as TaskStatus
+    parsed = JSON.parse(raw)
   } catch (cause) {
     throw new CorruptVaultError(path, cause)
   }
+  try {
+    assertVaultShape(parsed)
+  } catch (cause) {
+    throw new CorruptVaultError(path, cause instanceof ValidationError ? cause : cause)
+  }
+  return parsed
 }
 
 /** Atomic write: tmp + rename. */

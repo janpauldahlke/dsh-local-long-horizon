@@ -68,6 +68,15 @@ const recordSchema = {
     phase: { type: 'string' as const },
     enabled: { type: 'boolean' as const },
     next: { type: 'array' as const, items: { type: 'string' as const } },
+    done: { type: 'array' as const },
+    inFlight: {},
+    blocked: {},
+    verifyHint: { type: 'string' as const },
+    keyPaths: { type: 'array' as const, items: { type: 'string' as const } },
+    notes: { type: 'string' as const },
+    lastSessionId: { type: 'string' as const },
+    gitBranch: { type: 'string' as const },
+    _warn: { type: 'string' as const },
   },
 }
 
@@ -82,7 +91,11 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
   disposers.push(tools.register({
     name: 'status_ping',
     description: 'Health probe for dsh-local-long-horizon host module.',
-    parameters: {},
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {},
+    },
     output: {
       schema: {
         type: 'object',
@@ -105,10 +118,14 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
     name: 'status_init',
     description: 'Create or refresh the long-horizon vault for a project cwd. Enables Long horizon ON.',
     parameters: {
-      cwd: { type: 'string', description: 'Absolute project cwd (defaults to session cwd).' },
-      title: { type: 'string', description: 'Short task title.' },
-      verifyHint: { type: 'string', description: 'How to verify done items.' },
-      phase: { type: 'string', description: 'Short phase label.' },
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        cwd: { type: 'string', description: 'Absolute project cwd (defaults to session cwd).' },
+        title: { type: 'string', description: 'Short task title.' },
+        verifyHint: { type: 'string', description: 'How to verify done items.' },
+        phase: { type: 'string', description: 'Short phase label.' },
+      },
     },
     output: { schema: recordSchema, render: renderJson },
     async execute(args: ToolArgs, exec: ExecLike) {
@@ -129,7 +146,11 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
     name: 'status_get',
     description: 'Return the full structured long-horizon status for the current (or named) cwd.',
     parameters: {
-      cwd: { type: 'string', description: 'Absolute project cwd (defaults to session cwd).' },
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        cwd: { type: 'string', description: 'Absolute project cwd (defaults to session cwd).' },
+      },
     },
     output: { schema: recordSchema, render: renderJson },
     async execute(args: ToolArgs, exec: ExecLike) {
@@ -169,16 +190,61 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
 
   disposers.push(tools.register({
     name: 'status_set_inflight',
-    description: 'Set or clear the single in-flight slice. Pass empty summary to clear.',
+    description:
+      'Set the single in-flight work slice. ALWAYS pass summary (non-empty string). '
+      + 'To clear, use status_clear_inflight instead. Never call with empty args. '
+      + 'Do not write STATUS.md or .dsh temps by hand.',
     parameters: {
-      cwd: { type: 'string' },
-      summary: { type: 'string', description: 'In-flight summary, or empty to clear.' },
+      type: 'object',
+      additionalProperties: false,
+      required: ['summary'],
+      properties: {
+        cwd: { type: 'string' },
+        summary: {
+          type: 'string',
+          minLength: 1,
+          description: 'Non-empty in-flight work summary.',
+        },
+      },
     },
     output: { schema: recordSchema, render: renderJson },
     async execute(args: ToolArgs, exec: ExecLike) {
       try {
-        const summary = args.summary?.trim() ? args.summary : null
-        return await service.setInflight(resolveCwd(args, exec), summary, writerFrom(exec))
+        const summary = typeof args.summary === 'string' ? args.summary.trim() : ''
+        if (!summary) {
+          throw new ValidationError(
+            'status_set_inflight requires a non-empty summary; use status_clear_inflight to clear',
+          )
+        }
+        return await service.setInflight(
+          resolveCwd(args, exec),
+          summary,
+          writerFrom(exec),
+        )
+      } catch (err) {
+        toolError(err)
+      }
+    },
+  }))
+
+  disposers.push(tools.register({
+    name: 'status_clear_inflight',
+    description: 'Clear the in-flight slice. No arguments required besides optional cwd.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        cwd: { type: 'string' },
+      },
+    },
+    output: { schema: recordSchema, render: renderJson },
+    async execute(args: ToolArgs, exec: ExecLike) {
+      try {
+        return await service.setInflight(
+          resolveCwd(args, exec),
+          null,
+          writerFrom(exec),
+        )
       } catch (err) {
         toolError(err)
       }
@@ -216,7 +282,11 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
       required: ['summary'],
       properties: {
         cwd: { type: 'string' },
-        summary: { type: 'string' },
+        summary: {
+          type: 'string',
+          minLength: 1,
+          description: 'Non-empty done summary.',
+        },
         verify: { type: 'string', description: 'How this was verified.' },
         rotateNext: { type: 'boolean', description: 'If true and next[0] matches summary, drop it.' },
       },
@@ -239,8 +309,10 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
           Boolean(args.rotateNext),
           writerFrom(exec),
         )
-        if (warn) (record as { _warn?: string })._warn = warn
-        return record
+        // Fresh plain object — never mutate the vault record with `_warn`.
+        const out = JSON.parse(JSON.stringify(record)) as Record<string, unknown>
+        if (warn) out._warn = warn
+        return out
       } catch (err) {
         toolError(err)
       }
@@ -256,7 +328,11 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
       required: ['reason'],
       properties: {
         cwd: { type: 'string' },
-        reason: { type: 'string' },
+        reason: {
+          type: 'string',
+          minLength: 1,
+          description: 'Non-empty blocked reason.',
+        },
       },
     },
     output: { schema: recordSchema, render: renderJson },
@@ -273,7 +349,11 @@ export function registerTools(ctx: Context, service: TaskStatusService): () => v
     name: 'status_unblock',
     description: 'Clear the blocked state.',
     parameters: {
-      cwd: { type: 'string' },
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        cwd: { type: 'string' },
+      },
     },
     output: { schema: recordSchema, render: renderJson },
     async execute(args: ToolArgs, exec: ExecLike) {

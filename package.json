@@ -13,10 +13,21 @@
     "lib",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "media"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/janpauldahlke/dsh-local-long-horizon.git"
+  },
+  "homepage": "https://github.com/janpauldahlke/dsh-local-long-horizon#readme",
+  "bugs": {
+    "url": "https://github.com/janpauldahlke/dsh-local-long-horizon/issues"
+  },
   "scripts": {
     "build": "node build.mjs",
+    "test": "node build.mjs && node scripts/run-tests.mjs",
+    "smoke": "npm test",
     "prepare": "node build.mjs || node -e \"console.warn('[dsh-local-long-horizon] prepare: build skipped (build toolchain unavailable); relying on prebuilt lib/')\""
   },
   "keywords": [
