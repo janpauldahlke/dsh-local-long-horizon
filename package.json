@@ -1,6 +1,6 @@
 {
   "name": "dsh-local-long-horizon",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Host-owned long-horizon task status for DeepSeek Harness local coding agents (tools + inject + STATUS.md + rightbar).",
   "type": "module",
   "main": "lib/index.js",
@@ -31,11 +31,19 @@
     "prepare": "node build.mjs || node -e \"console.warn('[dsh-local-long-horizon] prepare: build skipped (build toolchain unavailable); relying on prebuilt lib/')\""
   },
   "keywords": [
+    "dsh-plugin",
     "deepseek-harness",
+    "deepseek-harness-plugin",
     "dsh",
+    "cordis",
+    "cordis-plugin",
     "long-horizon",
     "task-status",
-    "agent-tools"
+    "agent-tools",
+    "autonomous-agents",
+    "coding-agents",
+    "sidebar",
+    "web-ui"
   ],
   "dsh": {
     "bundle": {
