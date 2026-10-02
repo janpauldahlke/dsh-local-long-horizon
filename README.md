@@ -232,6 +232,10 @@ npm test          # build + node suite (schema, vault, tools — no GPU)
 
 ---
 
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, layout, and PR expectations.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).
