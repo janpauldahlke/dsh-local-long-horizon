@@ -1,6 +1,6 @@
 {
   "name": "dsh-local-long-horizon",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Host-owned long-horizon task status for DeepSeek Harness local coding agents (tools + inject + STATUS.md + rightbar).",
   "type": "module",
   "main": "lib/index.js",

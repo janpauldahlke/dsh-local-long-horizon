@@ -67,6 +67,7 @@ function basename(path: string): string {
 
 function RecordView({ record }: { record: TaskStatus }) {
   const recent = record.done.slice(-5).reverse()
+  const [doneOpen, setDoneOpen] = useState(true)
   return (
     <>
       {record.blocked ? (
@@ -92,18 +93,68 @@ function RecordView({ record }: { record: TaskStatus }) {
         )}
       </div>
       <div style={card}>
-        <div style={{ fontWeight: 600, marginBottom: 4 }}>Done (recent)</div>
-        {recent.length === 0 ? (
-          <div style={muted}>(none)</div>
-        ) : (
-          recent.map((d) => (
-            <div key={d.id} style={{ marginBottom: 4 }}>
-              ✓ {d.summary}
-              {d.verify ? <span style={muted}> · verify: {d.verify}</span> : null}
-              <span style={muted}> · {ageLabel(d.at)}</span>
-            </div>
-          ))
-        )}
+        <button
+          type="button"
+          onClick={() => setDoneOpen((o) => !o)}
+          aria-expanded={doneOpen}
+          title={doneOpen ? 'Collapse Done (recent)' : 'Expand Done (recent)'}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            width: '100%',
+            margin: 0,
+            marginBottom: doneOpen ? 4 : 0,
+            padding: 0,
+            border: 'none',
+            background: 'transparent',
+            color: 'inherit',
+            font: 'inherit',
+            fontWeight: 600,
+            cursor: 'pointer',
+            textAlign: 'left',
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              display: 'inline-block',
+              width: 10,
+              fontSize: 10,
+              opacity: 0.7,
+              transform: doneOpen ? 'rotate(90deg)' : 'none',
+              transition: 'transform 120ms ease',
+            }}
+          >
+            ▸
+          </span>
+          Done (recent)
+          {recent.length > 0 ? (
+            <span style={{ ...muted, fontWeight: 500, marginLeft: 'auto' }}>
+              {recent.length}
+            </span>
+          ) : null}
+        </button>
+        {doneOpen ? (
+          <div style={{
+            maxHeight: 220,
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
+          }}
+          >
+            {recent.length === 0 ? (
+              <div style={muted}>(none)</div>
+            ) : (
+              recent.map((d) => (
+                <div key={d.id} style={{ marginBottom: 4 }}>
+                  ✓ {d.summary}
+                  {d.verify ? <span style={muted}> · verify: {d.verify}</span> : null}
+                  <span style={muted}> · {ageLabel(d.at)}</span>
+                </div>
+              ))
+            )}
+          </div>
+        ) : null}
       </div>
     </>
   )
